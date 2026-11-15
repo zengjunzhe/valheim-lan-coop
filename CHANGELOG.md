@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## v1.3.0 — 事实核查，推翻此前核心论断
+
+**这是一次纠错提交，不是新功能。**
+
+对照上游项目源码和二进制实际验证后，确认此前版本存在多处根本性错误：
+
+| # | 之前 | 实际 |
+|---|---|---|
+| 1 | `github.com/Mr_Goldberg/goldberg_emulator` | **404**，原版在 GitLab |
+| 2 | `enable_lan_only=1` 为核心配置 | **该键不存在**（strings 实测 0 次） |
+| 3 | 两端统一写 `configs.main.ini` | Windows 用 ini，**macOS 只认 `.txt`** |
+| 4 | 端口 2456 | emu 发现端口是 **47584**，2456 是游戏端口 |
+| 5 | Mac 存档 `~/.config/unity3d/IronGate/Valheim` | Goldberg 存档在 `~/Library/Application Support/Goldberg SteamEmu Saves/` |
+| 6 | Mac 可能需要 CrossOver | **Valheim 有原生 macOS 版** |
+
+新增：
+
+- `docs/08-verification.md` — 完整核查记录，含实测命令、二进制分析、上游 issue 引用
+- `scripts/README.md` — 明确标注哪些脚本失效、哪些仍可用
+- 6 个文档顶部加警告横幅
+
+实测内容：
+
+- 下载 gbe_fork 和 aaf2tbz 的实际二进制，用 `strings` 统计配置键出现次数
+- 用 `file` / 魔数解析确认 `libsteam_api.dylib` 是 universal binary（x86_64 + arm64）
+- 用 PE 头解析确认 Windows dll 是 x64（machine 0x8664）
+- 从 dylib 二进制里提取 `PROGRAM_NAME_1..8` 实际字节，确认存档路径
+- 通过 Steam Store API 确认 Valheim 有 macOS 版
+
+上游 issue 核查：
+
+- **#396**（已关）— Valheim 联机在 2025-09-13 后被破坏，2026-01-17 修复。**必须用修复后版本**
+- **#41**（已关）— 维护者确认 LAN 发现靠 `custom_broadcasts.txt`，不是任何 `enable_lan_only`
+- **#189**（open）— macOS 官方不支持，只能靠第三方 fork
+
+GitHub 全站搜索确认：**没有现成的 Valheim + Goldberg 方案**。
+
+未验证部分已在 `08-verification.md` 第六节逐条标注。
+
+
 ## v1.2.0 — GitHub 作为两台机之间的中转
 
 **新增**：仓库兼作 Windows ↔ Mac 的数据管道，不再只托管代码。

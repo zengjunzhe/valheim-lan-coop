@@ -29,3 +29,10 @@ sync/**/*.tmp
 sync/**/*.part
 sync/**/~$*
 sync/saves/**/*.db.tmp
+
+# 研究用二进制（体积大，不入库）
+research/artifacts/*.dylib
+research/artifacts/*.dll
+research/artifacts/*.so
+research/artifacts/*.7z
+research/artifacts/*.tar.bz2

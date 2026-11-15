@@ -22,10 +22,14 @@ warn() { printf '  %s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
 bad()  { printf '  %s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$1"; }
 info() { printf '         %s%s%s\n' "$C_GRAY" "$1" "$C_RESET"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/role.sh
+source "$SCRIPT_DIR/lib/role.sh" 2>/dev/null || true
+
 GOLDBERG_DIR=""
 APP=""
-ACCOUNT_NAME="PlayerB"
-STEAM_ID="76561198000000002"
+ACCOUNT_NAME=""
+STEAM_ID=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,6 +43,21 @@ while [[ $# -gt 0 ]]; do
         *) bad "未知参数: $1"; exit 1 ;;
     esac
 done
+
+# ---------- 读角色配置 ----------
+REPO_ROOT="$(find_repo_root "$SCRIPT_DIR" 2>/dev/null || true)"
+MY_ROLE="host"
+if [[ -n "$REPO_ROOT" ]]; then
+    eval "$(read_role_conf "$REPO_ROOT")"
+    MY_ROLE="$(this_machine_role "$REPO_ROOT")"
+fi
+
+# 命令行没指定身份时，用配置里的
+if [[ -z "$ACCOUNT_NAME" || -z "$STEAM_ID" ]]; then
+    read -r CONF_NAME CONF_SID CONF_ROLE <<< "$(my_identity "$REPO_ROOT" 2>/dev/null || echo 'PlayerA 76561198000000001 host')"
+    [[ -z "$ACCOUNT_NAME" ]] && ACCOUNT_NAME="$CONF_NAME"
+    [[ -z "$STEAM_ID" ]] && STEAM_ID="$CONF_SID"
+fi
 
 printf '\n%sValheim LAN Coop - 应用 Goldberg 补丁（Mac）%s\n' "$C_RESET" "$C_RESET"
 
@@ -192,6 +211,11 @@ EOF
 done
 
 info "身份: $ACCOUNT_NAME / $STEAM_ID"
+if [[ "$MY_ROLE" == "host" ]]; then
+    info "角色: 主机（开世界）— 来自 config/role.conf"
+else
+    info "角色: 客机（加入）— 来自 config/role.conf"
+fi
 info "enable_lan_only=1（关键：跳过 Steam ticket 校验）"
 
 # ---------- 重签名 ----------

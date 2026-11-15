@@ -1,5 +1,9 @@
 # Mac 客机完整步骤（Steam 版）
 
+> ⚠️ **本文档部分内容已被 [`08-verification.md`](08-verification.md) 推翻。**
+> 特别是 `enable_lan_only` 这个配置键**不存在**，端口也不是 2456。
+> 阅读时请对照 08 号文档的修正说明。
+
 前提：**已经用 Steam 客户端把 Valheim 下载好**。Mac 是客机，通过 IP 加入 Windows 的世界。
 
 > ⚠️ 这一步会让 Mac 侧脱离 Steam 正版身份。如果必须保持 Mac 正版，本方案不适用——见 `README.md`。

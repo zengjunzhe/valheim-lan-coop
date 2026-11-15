@@ -12,8 +12,8 @@
 param(
     [string]$ValheimDir  = "",
     [string]$GoldbergDir = "C:\goldberg",
-    [string]$AccountName = "PlayerA",
-    [string]$SteamId     = "76561198000000001",
+    [string]$AccountName = "",
+    [string]$SteamId     = "",
     [switch]$NoBackupCheck
 )
 
@@ -24,6 +24,18 @@ function OK   { param($t) Write-Host "  [OK]   $t" -ForegroundColor Green }
 function Warn { param($t) Write-Host "  [WARN] $t" -ForegroundColor Yellow }
 function Bad  { param($t) Write-Host "  [FAIL] $t" -ForegroundColor Red }
 function Info { param($t) Write-Host "         $t" -ForegroundColor Gray }
+
+# ---------- 读角色配置 ----------
+$libPath = Join-Path $PSScriptRoot "lib\role.ps1"
+if (Test-Path $libPath) { . $libPath }
+$repoRoot = Find-RepoRoot -StartDir $PSScriptRoot
+$roleCfg = Get-RoleConfig -RepoDir $repoRoot
+$myId = Get-MyIdentity -RepoDir $repoRoot
+
+# 命令行没指定时用配置里的
+if (-not $PSBoundParameters.ContainsKey("AccountName") -or -not $AccountName) { $AccountName = $myId.Name }
+if (-not $PSBoundParameters.ContainsKey("SteamId") -or -not $SteamId) { $SteamId = $myId.SteamId }
+$myRoleLabel = if ($myId.Role -eq "host") { "主机（开世界）" } else { "客机（加入）" }
 
 Write-Host ""
 Write-Host "Valheim LAN Coop - 应用 Goldberg 补丁" -ForegroundColor White
@@ -165,6 +177,7 @@ language=schinese
 "@
 Set-Content -Path $userIni -Value $userContent -Encoding ASCII
 OK "configs.user.ini → $AccountName / $SteamId"
+Info "本机角色: $myRoleLabel（来自 config\role.conf）"
 
 # configs.main.ini
 $mainIni = Join-Path $ss "configs.main.ini"

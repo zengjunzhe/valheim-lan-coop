@@ -25,6 +25,15 @@ function Warn { param($t) Write-Host "  [WARN] $t" -ForegroundColor Yellow }
 function Bad  { param($t) Write-Host "  [FAIL] $t" -ForegroundColor Red }
 function Info { param($t) Write-Host "         $t" -ForegroundColor Gray }
 
+# ---------- 读角色配置 ----------
+$libPath = Join-Path $PSScriptRoot "lib\role.ps1"
+if (Test-Path $libPath) { . $libPath }
+$repoRoot = Find-RepoRoot -StartDir $PSScriptRoot
+$roleCfg = Get-RoleConfig -RepoDir $repoRoot
+$myId = Get-MyIdentity -RepoDir $repoRoot
+$isHost = ($myId.Role -eq "host")
+$roleLabel = if ($isHost) { "主机（开世界）" } else { "客机（加入）" }
+
 Write-Host ""
 Write-Host "Valheim LAN Coop - 同步推送" -ForegroundColor White
 Line
@@ -113,7 +122,12 @@ try {
     }
 
     $steamProc = if (Get-Process steam -ErrorAction SilentlyContinue) { "运行中" } else { "未运行" }
-    $worldState = if (netstat -ano | Select-String ":2456\s" | Select-String "UDP") { "已开启（端口监听中）" } else { "未开启" }
+    $portNum = $roleCfg.Port
+    $worldState = if ($isHost) {
+        if (netstat -ano | Select-String ":$portNum\s" | Select-String "UDP") { "已开启（端口 $portNum 监听中）" } else { "未开启" }
+    } else {
+        "不适用（客机）"
+    }
 
     OK "IP=$ip  buildid=$buildid  补丁=$patchStatus"
 
@@ -128,6 +142,8 @@ try {
 ``````
 更新时间   : $now
 主机名     : $hostname
+本机角色   : $roleLabel
+身份       : $($myId.Name) / $($myId.SteamId)
 内网 IP    : $ip
 端口       : 2456
 buildid    : $buildid
@@ -176,6 +192,11 @@ $(if ($Message) { $Message } else { "（本次推送无附加留言）" })
             }
             if ($copied -gt 0) {
                 OK "拷贝 $copied 个文件，共 $([math]::Round($totalMB,1)) MB → sync\saves\windows\"
+                if ($isHost) {
+                    Info "本机是主机 → 这里的世界存档是权威版本，Mac 拉下来就是备份"
+                } else {
+                    Info "本机是客机 → 这里的角色存档属于 $($myId.Name)"
+                }
                 if ($totalMB -gt 20) {
                     Warn "存档较大（$([math]::Round($totalMB,1)) MB），仓库会持续变大"
                     Info "长期使用建议只推 .fwl，或用 git gc 清理"

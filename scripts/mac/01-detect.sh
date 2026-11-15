@@ -19,6 +19,10 @@ warn() { printf '  %s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
 bad()  { printf '  %s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$1"; }
 info() { printf '         %s%s%s\n' "$C_GRAY" "$1" "$C_RESET"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/role.sh
+source "$SCRIPT_DIR/lib/role.sh" 2>/dev/null || true
+
 printf '\n%sValheim LAN Coop - Mac 环境探测%s\n' "$C_RESET" "$C_RESET"
 
 # ---------- 平台检查 ----------
@@ -39,6 +43,27 @@ else
     info "Intel Mac — dylib 必须是 x86_64 或 universal"
 fi
 ok "主机名  : $(hostname)"
+
+# ---------- 角色 ----------
+head "角色配置"
+REPO_ROOT="$(find_repo_root "$SCRIPT_DIR" 2>/dev/null || true)"
+if [[ -n "$REPO_ROOT" && -f "$REPO_ROOT/config/role.conf" ]]; then
+    eval "$(read_role_conf "$REPO_ROOT")"
+    MY_ROLE="$(this_machine_role "$REPO_ROOT")"
+    if [[ "$MY_ROLE" == "host" ]]; then
+        ok "本机角色: 主机（开世界）"
+        info "身份: $ROLE_HOST_NAME / $ROLE_HOST_STEAMID"
+        info "Windows 是客机: $ROLE_CLIENT_NAME / $ROLE_CLIENT_STEAMID"
+    else
+        ok "本机角色: 客机（加入）"
+        info "身份: $ROLE_CLIENT_NAME / $ROLE_CLIENT_STEAMID"
+        info "Windows 是主机: $ROLE_HOST_NAME / $ROLE_HOST_STEAMID"
+    fi
+    ok "端口: $ROLE_PORT"
+    info "配置: $REPO_ROOT/config/role.conf"
+else
+    warn "未找到 config/role.conf，按默认（Mac 主机）处理"
+fi
 
 # ---------- Valheim ----------
 head "Valheim 安装"

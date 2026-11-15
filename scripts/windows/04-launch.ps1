@@ -5,7 +5,7 @@
 [CmdletBinding()]
 param(
     [string]$ValheimDir = "",
-    [int]$Port = 2456,
+    [int]$Port = 0,
     [switch]$NoConsole,
     [switch]$Force
 )
@@ -18,8 +18,19 @@ function Warn { param($t) Write-Host "  [WARN] $t" -ForegroundColor Yellow }
 function Bad  { param($t) Write-Host "  [FAIL] $t" -ForegroundColor Red }
 function Info { param($t) Write-Host "         $t" -ForegroundColor Gray }
 
+# ---------- 读角色配置 ----------
+$libPath = Join-Path $PSScriptRoot "lib\role.ps1"
+if (Test-Path $libPath) { . $libPath }
+$repoRoot = Find-RepoRoot -StartDir $PSScriptRoot
+$roleCfg = Get-RoleConfig -RepoDir $repoRoot
+$myId = Get-MyIdentity -RepoDir $repoRoot
+$isHost = ($myId.Role -eq "host")
+$roleLabel = if ($isHost) { "主机（开世界）" } else { "客机（加入）" }
+
 Write-Host ""
-Write-Host "Valheim LAN Coop - 启动游戏（主机模式）" -ForegroundColor White
+if ($Port -le 0) { $Port = $roleCfg.Port }
+
+Write-Host "Valheim LAN Coop - 启动游戏（$roleLabel）" -ForegroundColor White
 Line
 
 # ---------- 定位 ----------
@@ -149,9 +160,15 @@ try {
 
 # ---------- 后续提示 ----------
 Head "接下来"
-Info "1. 游戏内 Start Game → 新建或选择世界"
-Info "2. 必须真正进入世界，端口才开始监听"
-Info "3. 进世界后按 F5 看控制台，确认无报错"
+if ($isHost) {
+    Info "1. 游戏内 Start Game → 新建或选择世界"
+    Info "2. 必须真正进入世界，端口才开始监听"
+    Info "3. 进世界后按 F5 看控制台，确认无报错"
+} else {
+    Info "1. 游戏内 Join Game → Join IP"
+    Info "2. 填 Mac 的内网 IP + 端口"
+    Info "3. 不知道 Mac 的 IP → 先跑 05-sync-pull.ps1"
+}
 Write-Host ""
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
        Where-Object { $_.IPAddress -like "192.168.*" } |

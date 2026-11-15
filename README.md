@@ -1,222 +1,147 @@
-# Valheim 局域网双人联机（一份 Steam 授权）
+# ⚠️ 本仓库当前状态：未经证实的方案
 
-在两台电脑上实现《英灵神殿》局域网双人联机，**只买一份 Steam 游戏**。
-
-- **两台都先用 Steam 下载**（同一账号各自下载，buildid 天然一致）
-- **Mac**：打 Goldberg 补丁，客机
-- **Windows**：打 Goldberg 补丁，主机（开世界）
-- **联机**：局域网 UDP 直连，无 Steam 认证环节
-
-> Windows 按 [`docs/00-checklist.md`](docs/00-checklist.md) + [`docs/02-windows-setup.md`](docs/02-windows-setup.md) 走，Mac 按清单 + [`docs/03-mac-setup.md`](docs/03-mac-setup.md) 走。
+> **2026-11-15 更新：核心技术论断已被推翻。**
+>
+> 详细核查见 **[`docs/08-verification.md`](docs/08-verification.md)**。
+>
+> **`scripts/` 目录下的脚本基于错误的配置键，按现状执行必然失败。**
 
 ---
 
-## 核心思路
-
-```
-① 两台都用 Steam 下载 Valheim（同账号，版本天然一致）
-② 下载完退出 Steam，之后不再用它启动
-③ 两台都替换 steam api 为 Goldberg（伪造身份）
-④ steam_settings/configs.main.ini 里 enable_lan_only=1（关掉 Steam 网络，走 IP 直连）
-⑤ Windows 开世界，Mac 用 Join IP 连
-```
-
-`enable_lan_only=1` 是整个方案成立的关键：没有它，Goldberg 的假 ticket 会在 Steam 认证握手时被拒。
-
----
-
-## 为什么不用 Steam 直连
-
-| 限制 | 说明 |
-|---|---|
-| 同账号并发 | 同一款游戏同时只能一个实例运行 |
-| 家庭共享 | 同款游戏同时只能一人启动，共享者本人也受限 |
-| 离线模式 | 需先在线验证，验证后并发限制依然生效 |
-
-限制在**账户层**，不在游戏层，所以绕不过。Goldberg 替换的是身份认证环节，让第二台机器不需要真 Steam ticket。
-
----
-
-## 目录结构
-
-```
-valheim-lan-coop/
-├── README.md                      ← 你在这里
-├── CHANGELOG.md
-├── docs/
-│   ├── 00-checklist.md            ← 照做版清单（先看这个）
-│   ├── 01-architecture.md         ← 原理、为什么这么做
-│   ├── 02-windows-setup.md        ← Windows 主机完整步骤
-│   ├── 03-mac-setup.md            ← Mac 客机完整步骤
-│   ├── 04-play-and-join.md        ← 开玩、加入、存档
-│   ├── 05-troubleshooting.md      ← 排错表
-│   ├── 06-rollback.md             ← 回滚到正版
-│   └── 07-git-as-bridge.md        ← 用 GitHub 当两台机之间的中转
-├── scripts/
-│   ├── windows/
-│   │   ├── 01-detect.ps1          ← 环境探测（先跑）
-│   │   ├── 02-apply-goldberg.ps1  ← 打补丁
-│   │   ├── 03-firewall.ps1        ← 防火墙放行
-│   │   ├── 04-launch.ps1          ← 启动游戏
-│   │   ├── 05-sync-pull.ps1       ← 从 GitHub 拉对方的东西
-│   │   ├── 06-sync-push.ps1       ← 推自己的存档/状态/诊断
-│   │   ├── 07-sync-both.ps1       ← 一键双向同步
-│   │   └── 99-rollback.ps1        ← 一键回滚
-│   └── mac/
-│       ├── 01-detect.sh
-│       ├── 02-apply-goldberg.sh
-│       ├── 03-resign.sh
-│       ├── 04-launch.sh
-│       ├── 05-sync-pull.sh
-│       ├── 06-sync-push.sh
-│       ├── 07-sync-both.sh
-│       └── 99-rollback.sh
-├── templates/                     ← 参考副本，脚本不读
-│   ├── configs.user.A.ini         ← Windows 主机身份
-│   ├── configs.user.B.ini         ← Mac 客机身份
-│   ├── configs.main.lan.ini       ← enable_lan_only=1
-│   └── steam_appid.txt
-└── sync/                          ← GitHub 中转目录（见下）
-    ├── shared/                    ← 状态交换 + 留言板
-    ├── saves/windows/             ← 主机存档
-    ├── saves/mac/                 ← 客机存档
-    ├── diag/windows/              ← Windows 诊断
-    ├── diag/mac/                  ← Mac 诊断
-    ├── from-windows/              ← Windows → Mac 传文件
-    └── from-mac/                  ← Mac → Windows 传文件
-```
-
----
-
-## 快速开始
-
-### 第一步：两台都用 Steam 下载
-
-Windows 和 Mac 各自登录同一账号，在 Steam 里安装 Valheim。下载完**退出 Steam**。
-
-### 第二步：Windows（主机）
-
-```powershell
-cd scripts\windows
-powershell -ExecutionPolicy Bypass -File .\01-detect.ps1
-```
-
-记下输出里的两个值：`buildid` 和 `>>> Mac 侧 Join IP 填: 192.168.x.x:2456`
-
-下载 Goldberg 到 `C:\goldberg`，然后：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\02-apply-goldberg.ps1 -GoldbergDir C:\goldberg
-powershell -ExecutionPolicy Bypass -File .\03-firewall.ps1
-powershell -ExecutionPolicy Bypass -File .\04-launch.ps1
-```
-
-### 第三步：Mac（客机）
-
-```bash
-cd scripts/mac
-chmod +x *.sh
-./01-detect.sh
-```
-
-确认架构匹配（Apple Silicon 需 arm64/universal）。下载 Goldberg 到 `~/goldberg`，然后：
-
-```bash
-./02-apply-goldberg.sh --goldberg-dir ~/goldberg
-./04-launch.sh --host 192.168.1.23
-```
-
-### 第四步：开玩
-
-Windows 进游戏 → `Start Game` → 进世界
-Mac → `Join Game` → `Join IP` → `192.168.1.23:2456`
-
----
-
-## 三个配置文件（缺一不可）
-
-| 文件 | 内容 | 作用 |
-|---|---|---|
-| `steam_settings/steam_appid.txt` | `892970` | 告诉 Goldberg 这是哪个游戏 |
-| `steam_settings/configs.user.ini` | 两端 `account_steamid` 必须不同 | 玩家唯一标识 |
-| `steam_settings/configs.main.ini` | `enable_lan_only=1` | 跳过 Steam ticket 校验 |
-
-默认身份：
-
-| 机器 | account_name | account_steamid |
-|---|---|---|
-| Windows | `PlayerA` | `76561198000000001` |
-| Mac | `PlayerB` | `76561198000000002` |
-
----
-
-## 前置条件
-
-- 两台在**同一网段**（都是 `192.168.x.*`，第三段相同）
-- 路由器**关闭 AP 隔离 / 客户端隔离**
-- 两台 **buildid 相同**（Steam 下载天然一致）
-- 局域网 UDP 2456-2458 互通
-- Windows 网络位置设为**专用**，不是公用
-
----
-
-## 已知代价
+## 一句话现状
 
 | 项 | 状态 |
 |---|---|
-| Steam 成就 | 不可用 |
-| 云存档 | 不可用（手动拷） |
-| 好友列表 / 邀请 | 不可用（用 IP 直连） |
-| 主机退出游戏 | 全队断线（想让世界常驻见 `docs/04`） |
-| 反作弊 | Valheim 无 VAC，无影响 |
-| 存档位置 | 主机侧 `%USERPROFILE%\AppData\LocalLow\IronGate\Valheim\` |
+| 目标 | Valheim 局域网双人联机，一份 Steam 授权 |
+| 技术路线 | Goldberg Steam Emulator 替换 steam api |
+| 可行性 | **技术上有希望，但未实测** |
+| 现有脚本 | **配置键全错，不能直接用** |
+| 现成方案 | **GitHub 上找不到任何现成项目** |
+| 下一步 | 先在 Mac 上做单机验证，通过后再谈联机 |
 
 ---
 
-## 一键回滚
+## 关键错误（已修正到 08 号文档）
 
-```powershell
-# Windows
-powershell -ExecutionPolicy Bypass -File .\99-rollback.ps1
-```
-
-```bash
-# Mac
-./99-rollback.sh
-```
-
-恢复原版文件后可正常通过 Steam 启动，存档不受影响。
-
----
-
-## GitHub 当两台机之间的中转
-
-这个仓库不只是代码托管，同时是 **Windows ↔ Mac 的数据管道**。不用 U 盘、不用微信、不用内网共享。
-
-```powershell
-# Windows
-.\scripts\windows\07-sync-both.ps1                          # 双向同步
-.\scripts\windows\06-sync-push.ps1 -IncludeSaves -Diag      # 带存档和诊断
-```
-
-```bash
-# Mac
-./scripts/mac/07-sync-both.sh                                 # 双向同步
-./scripts/mac/06-sync-push.sh --saves --diag                  # 带存档和诊断
-```
-
-| 想交换什么 | 放哪 |
+| 之前写的 | 实际 |
 |---|---|
-| IP / buildid / 补丁状态 | `sync/shared/status-*.md`（脚本自动写） |
-| 世界存档、角色存档 | `sync/saves/` |
-| 诊断信息（排错） | `sync/diag/` |
-| 临时文件、截图、日志 | `sync/from-windows/` 或 `sync/from-mac/` |
-| 留言 | `sync/shared/notes.md` |
-
-目录按机器划分，**只写自己那半边**，所以不会产生 Git 冲突。详见 [`docs/07-git-as-bridge.md`](docs/07-git-as-bridge.md)。
+| `github.com/Mr_Goldberg/goldberg_emulator` | 404。原版在 `gitlab.com/Mr_Goldberg/goldberg_emulator` |
+| 核心配置 `enable_lan_only=1` | **该键不存在**，两个项目的二进制里都搜不到 |
+| 两端都写 `configs.main.ini` | Windows 用 ini，**macOS 构建只认 `.txt`**，格式不兼容 |
+| 端口 2456 | Goldberg emu 用 **47584**；2456 是 Valheim 游戏端口，两者不同 |
+| Mac 存档在 `~/.config/unity3d/IronGate/Valheim` | Goldberg 存档在 `~/Library/Application Support/Goldberg SteamEmu Saves/` |
 
 ---
 
-## 版本记录
+## 正确的技术事实
 
-见 [`CHANGELOG.md`](CHANGELOG.md)。
+### 下载地址
+
+```
+原版（Windows/Linux，1094★）
+  https://gitlab.com/Mr_Goldberg/goldberg_emulator
+
+活跃 fork（Windows，2856★，推荐）
+  https://github.com/Detanup01/gbe_fork
+  ⚠️ 必须 ≥ release-2026_01_17（更早版本破坏 Valheim 联机，issue #396）
+
+macOS 构建（唯一实测可用）
+  https://github.com/aaf2tbz/goldberg_emulator
+  ✅ universal binary（x86_64 + arm64），372 个 Steam 导出符号
+  ⚠️ 仅 6★、单作者，不是可靠长期依赖
+```
+
+### 正确的配置键
+
+| 用途 | 键名 | 值 |
+|---|---|---|
+| 游戏 ID | `steam_appid.txt` | `892970` |
+| 玩家名 | `account_name` / `account_name.txt` | 两端不同 |
+| Steam ID | `account_steamid` / `user_steam_id.txt` | 两端不同 |
+| 网络功能 | `disable_networking` / `disable_networking.txt` | **必须 0** |
+| 发现端口 | `listen_port` / `listen_port.txt` | **47584**，两端一致 |
+| 局域网发现 | `custom_broadcasts.txt` | 广播地址 + 对端 IP |
+
+### 局域网发现机制
+
+**不是** `enable_lan_only`。是 `custom_broadcasts.txt`（gbe_fork issue #41 维护者确认）：
+
+```
+192.168.1.255      ← 本网段广播地址
+192.168.1.23       ← 主机 IP
+192.168.1.45       ← 客机 IP
+```
+
+### Valheim 的两套联机协议
+
+- **PlayFab** — 官方跨平台联机，**Goldberg 无法模拟**（需真 Steam ticket）
+- **LAN**（Steam server browser）— Goldberg 可模拟，依赖 `custom_broadcasts.txt`
+
+所以只能走 LAN，且需要玩家自己开世界（专用服务器路径有已知兼容问题）。
+
+---
+
+## 为什么没有现成方案
+
+GitHub 全站搜索：
+
+```
+valheim + goldberg + guide        → 0
+valheim + coop + one copy         → 0
+valheim + multiplayer + emulator  → 0
+```
+
+只有 2 个相关 issue，都在 `Detanup01/gbe_fork`：
+
+- **#41**（已关）— Valheim LAN 支持，维护者指向 `custom_broadcasts.txt`
+- **#396**（已关）— Valheim 联机被破坏，2026-01-17 修复
+
+这条路是社区零星摸索出来的，没有成文方案。
+
+---
+
+## 建议的推进顺序
+
+**详细步骤见 [`docs/09-next-steps.md`](docs/09-next-steps.md)**（含具体命令和判据）。
+
+```
+阶段 1：Mac 单机验证          ← 现在应该做这个
+阶段 2：Windows 单机验证
+阶段 3：联机验证
+阶段 4：才写自动化脚本
+```
+
+**阶段 1 没通过之前，脚本都是空转。** 如果阶段 3 卡住，直接买第二份（¥30）更划算。
+
+---
+
+## 仓库内容
+
+| 路径 | 内容 | 状态 |
+|---|---|---|
+| `docs/08-verification.md` | **事实核查，先看这个** | ✅ 已核查 |
+| `docs/09-next-steps.md` | 验证步骤（含命令和判据） | ✅ 可执行 |
+| `docs/00-checklist.md` | 操作清单 | ⚠️ 基于错误配置，待重写 |
+| `docs/01-architecture.md` | 架构原理 | ⚠️ 部分错误 |
+| `docs/02-windows-setup.md` | Windows 步骤 | ⚠️ 配置键错误 |
+| `docs/03-mac-setup.md` | Mac 步骤 | ⚠️ 配置格式错误 |
+| `docs/04-play-and-join.md` | 开玩 | ⚠️ 端口错误 |
+| `docs/05-troubleshooting.md` | 排错 | ⚠️ 部分失效 |
+| `docs/06-rollback.md` | 回滚 | ✅ 逻辑可用 |
+| `docs/07-git-as-bridge.md` | GitHub 当数据管道 | ✅ 可用 |
+| `scripts/` | 自动化脚本 | ❌ **配置键全错**，见 `scripts/README.md` |
+| `research/` | 核查证据与来源索引 | ✅ 可复现 |
+| `config/role.conf` | 主机/客机角色配置 | ✅ 设计可用 |
+| `sync/` | 数据中转目录 | ✅ 可用 |
+
+---
+
+## 备选方案（如果 Goldberg 路线走不通）
+
+| 方案 | 成本 | 可靠性 |
+|---|---|---|
+| 买第二份游戏（史低约 ¥30） | ¥30 | ⭐⭐⭐⭐⭐ 官方支持 |
+| PC Game Pass（Windows 侧） | 订阅费 | ⭐⭐⭐⭐⭐ 官方支持 Steam↔GamePass 跨平台 |
+| Goldberg 路线 | 0 | ⭐⭐ 未实测，依赖第三方 fork |
+
+**官方 crossplay 确认可用**：Steam 版 ↔ Game Pass 版可跨平台联机，两端加 `-crossplay` 即可。

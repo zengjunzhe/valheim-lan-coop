@@ -20,9 +20,13 @@ warn() { printf '  %s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
 bad()  { printf '  %s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$1"; }
 info() { printf '         %s%s%s\n' "$C_GRAY" "$1" "$C_RESET"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/role.sh
+source "$SCRIPT_DIR/lib/role.sh" 2>/dev/null || true
+
 APP=""
 HOST=""
-PORT=2456
+PORT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -34,7 +38,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-printf '\n%sValheim LAN Coop - 启动（客机模式）%s\n' "$C_RESET" "$C_RESET"
+# ---------- 读角色配置 ----------
+REPO_ROOT="$(find_repo_root "$SCRIPT_DIR" 2>/dev/null || true)"
+MY_ROLE="host"
+CONF_PORT=2456
+if [[ -n "$REPO_ROOT" ]]; then
+    eval "$(read_role_conf "$REPO_ROOT")"
+    MY_ROLE="$(this_machine_role "$REPO_ROOT")"
+    CONF_PORT="$ROLE_PORT"
+fi
+[[ -z "$PORT" ]] && PORT="$CONF_PORT"
+
+MODE_LABEL="主机（开世界）"
+[[ "$MY_ROLE" != "host" ]] && MODE_LABEL="客机（加入）"
+
+printf '\n%sValheim LAN Coop - 启动（%s）%s\n' "$C_RESET" "$MODE_LABEL" "$C_RESET"
 
 # ---------- 平台检查 ----------
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -122,16 +140,30 @@ if pgrep -f "Valheim.app/Contents/MacOS/valheim" >/dev/null 2>&1; then
     fi
 fi
 
-# ---------- 主机连通性 ----------
-if [[ -n "$HOST" ]]; then
-    head "测试主机连通性"
-    info "目标: $HOST:$PORT"
-    if ping -c 2 -W 1000 "$HOST" >/dev/null 2>&1; then
-        ok "ICMP 可达"
+# ---------- 主机 / 客机差异 ----------
+if [[ "$MY_ROLE" == "host" ]]; then
+    head "主机模式"
+    MY_IP=$(ifconfig 2>/dev/null | grep "inet " | grep -v "127.0.0.1" | awk '{print $2}' | grep '^192\.168\.' | head -1)
+    [[ -z "$MY_IP" ]] && MY_IP=$(ifconfig 2>/dev/null | grep "inet " | grep -v "127.0.0.1" | awk '{print $2}' | head -1)
+    ok "本机 IP: ${MY_IP:-未知}"
+    info "启动后 Start Game → 新建/选择世界 → 真正进入世界"
+    info "端口 $PORT 进入世界后才开始监听"
+    printf '\n  %s>>> 告诉 Windows: Join IP 填 %s:%s%s\n\n' "$C_MAGENTA" "${MY_IP:-192.168.x.x}" "$PORT" "$C_RESET"
+else
+    if [[ -n "$HOST" ]]; then
+        head "测试主机连通性"
+        info "目标: $HOST:$PORT"
+        if ping -c 2 -W 1000 "$HOST" >/dev/null 2>&1; then
+            ok "ICMP 可达"
+        else
+            warn "ICMP 不通（可能被防火墙拦，UDP 仍可能通）"
+        fi
+        info "UDP 端口无法用 nc 可靠探测，直接进游戏试"
     else
-        warn "ICMP 不通（可能被防火墙拦，UDP 仍可能通）"
+        head "客机模式"
+        warn "未指定 --host，进入游戏后手动填 Windows 的 IP"
+        info "或用 ./05-sync-pull.sh 看 Windows 推送的 IP"
     fi
-    info "UDP 端口无法用 nc 可靠探测，直接进游戏试"
 fi
 
 # ---------- 启动 ----------
@@ -159,14 +191,22 @@ fi
 
 # ---------- 后续 ----------
 head "接下来"
-info "1. 游戏内 Join Game"
-info "2. 选 Join IP（不是 Join with code）"
-if [[ -n "$HOST" ]]; then
-    printf '\n  %s>>> 填: %s:%s%s\n\n' "$C_MAGENTA" "$HOST" "$PORT" "$C_RESET"
+if [[ "$MY_ROLE" == "host" ]]; then
+    info "1. Start Game → 新建或选择世界"
+    info "2. 真正进入世界（端口才开始监听）"
+    info "3. 按 F5 看控制台，确认无报错"
+    info "4. 跑 ./06-sync-push.sh 把 IP 推给 Windows"
 else
-    info "3. 填 Windows 的内网 IP + 端口，例如 192.168.1.23:2456"
+    info "1. 游戏内 Join Game"
+    info "2. 选 Join IP（不是 Join with code）"
+    if [[ -n "$HOST" ]]; then
+        printf '\n  %s>>> 填: %s:%s%s\n\n' "$C_MAGENTA" "$HOST" "$PORT" "$C_RESET"
+    else
+        info "3. 填 Windows 的内网 IP + 端口"
+        info "   不知道 IP → 先跑 ./05-sync-pull.sh"
+    fi
+    info "4. Join IP 无效时，按 F5 开控制台: connect IP:PORT"
 fi
-info "4. Join IP 无效时，按 F5 开控制台: connect IP:PORT"
 
 line
 printf '关闭本终端不影响游戏。\n\n'

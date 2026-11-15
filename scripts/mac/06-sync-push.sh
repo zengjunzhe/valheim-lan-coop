@@ -21,6 +21,10 @@ warn() { printf '  %s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$1"; }
 bad()  { printf '  %s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$1"; }
 info() { printf '         %s%s%s\n' "$C_GRAY" "$1" "$C_RESET"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/role.sh
+source "$SCRIPT_DIR/lib/role.sh" 2>/dev/null || true
+
 REPO_DIR=""
 SAVES=0
 DIAG=0
@@ -75,6 +79,17 @@ for p in "/Applications/Valheim.app" "$HOME/Applications/Valheim.app"; do
     [[ -d "$p" ]] && { APP="$p"; break; }
 done
 
+# ---------- 读角色配置 ----------
+REPO_ROOT="$(find_repo_root "$SCRIPT_DIR" 2>/dev/null || true)"
+MY_ROLE="host"
+MY_NAME="PlayerA"
+MY_SID="76561198000000001"
+if [[ -n "$REPO_ROOT" ]]; then
+    eval "$(read_role_conf "$REPO_ROOT")"
+    MY_ROLE="$(this_machine_role "$REPO_ROOT")"
+    read -r MY_NAME MY_SID _ <<< "$(my_identity "$REPO_ROOT")"
+fi
+
 # ---------- 收集状态 ----------
 head "收集本机状态"
 NOW=$(date "+%Y-%m-%d %H:%M:%S")
@@ -116,6 +131,16 @@ STEAM_PROC="未运行"
 pgrep -x "steam_osx" >/dev/null 2>&1 && STEAM_PROC="运行中"
 pgrep -x "Steam" >/dev/null 2>&1 && STEAM_PROC="运行中"
 
+# 主机才有端口监听
+WORLD_STATE="不适用（客机）"
+if [[ "$MY_ROLE" == "host" ]]; then
+    if netstat -an 2>/dev/null | grep -qE "udp.*\.2456|udp46.*2456"; then
+        WORLD_STATE="已开启（端口 2456 监听中）"
+    else
+        WORLD_STATE="未开启"
+    fi
+fi
+
 ok "IP=$IP  buildid=$BUILDID  架构=$ARCH  补丁=$PATCH_STATUS"
 
 # ---------- 写状态文件 ----------
@@ -128,6 +153,8 @@ cat > "sync/shared/status-mac.md" <<EOF
 \`\`\`
 更新时间   : $NOW
 主机名     : $HOSTNAME_V
+本机角色   : $(if [[ "$MY_ROLE" == "host" ]]; then echo "主机（开世界）"; else echo "客机（加入）"; fi)
+身份       : $MY_NAME / $MY_SID
 内网 IP    : $IP
 buildid    : $BUILDID
 架构       : $ARCH
@@ -173,6 +200,11 @@ if [[ $SAVES -eq 1 ]]; then
 
         if [[ $COPIED -gt 0 ]]; then
             ok "拷贝 $COPIED 个文件，共 $((TOTAL_KB/1024)) MB → sync/saves/mac/"
+            if [[ "$MY_ROLE" == "host" ]]; then
+                info "本机是主机 → 这里的世界存档是权威版本，Windows 拉下来就是备份"
+            else
+                info "本机是客机 → 这里的角色存档属于 $MY_NAME"
+            fi
             if [[ $TOTAL_KB -gt 20480 ]]; then
                 warn "存档较大（$((TOTAL_KB/1024)) MB），仓库会持续变大"
                 info "长期使用建议只推 .fwl，或定期 git gc"

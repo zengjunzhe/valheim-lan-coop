@@ -26,7 +26,6 @@ Line
 # ---------- 定位仓库 ----------
 Head "定位仓库"
 if (-not $RepoDir) {
-    # 从脚本位置往上找 .git
     $cur = $PSScriptRoot
     while ($cur) {
         if (Test-Path (Join-Path $cur ".git")) { $RepoDir = $cur; break }
@@ -44,7 +43,6 @@ OK "仓库: $RepoDir"
 
 Push-Location $RepoDir
 try {
-    # ---------- git 可用性 ----------
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Bad "未安装 git"
         Info "下载: https://git-scm.com/download/win"
@@ -101,6 +99,27 @@ try {
     }
     OK "拉取完成"
 
+    # ---------- 角色配置 ----------
+    $libPath = Join-Path $PSScriptRoot "lib\role.ps1"
+    if (Test-Path $libPath) { . $libPath }
+    $repoRootForRole = Find-RepoRoot -StartDir $PSScriptRoot
+    if ($repoRootForRole) {
+        $roleCfg = Get-RoleConfig -RepoDir $repoRootForRole
+        $myId = Get-MyIdentity -RepoDir $repoRootForRole
+        Head "角色配置"
+        if ($myId.Role -eq "host") {
+            OK "本机角色: 主机（开世界）"
+            Info "身份: $($myId.Name) / $($myId.SteamId)"
+            Info "Mac 是客机"
+        } else {
+            OK "本机角色: 客机（加入）"
+            Info "身份: $($myId.Name) / $($myId.SteamId)"
+            Info "Mac 是主机"
+        }
+        Info "端口: $($roleCfg.Port)"
+        Info "配置: $($roleCfg.Source)"
+    }
+
     # ---------- 展示对方内容 ----------
     if (-not $Quiet) {
         Head "Mac 侧状态"
@@ -114,7 +133,7 @@ try {
         Head "Mac 放的诊断"
         $macDiag = Join-Path $RepoDir "sync\diag\mac"
         if (Test-Path $macDiag) {
-            $files = Get-ChildItem $macDiag -File -ErrorAction SilentlyContinue
+            $files = Get-ChildItem $macDiag -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne ".gitkeep" }
             if ($files) {
                 $files | Sort-Object LastWriteTime -Descending | ForEach-Object {
                     Info "$($_.Name)  ($([math]::Round($_.Length/1KB,1)) KB, $($_.LastWriteTime.ToString('MM-dd HH:mm')))"
@@ -125,7 +144,7 @@ try {
         Head "Mac 放的存档"
         $macSaves = Join-Path $RepoDir "sync\saves\mac"
         if (Test-Path $macSaves) {
-            $files = Get-ChildItem $macSaves -File -Recurse -ErrorAction SilentlyContinue
+            $files = Get-ChildItem $macSaves -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne ".gitkeep" }
             if ($files) {
                 $files | ForEach-Object {
                     Info "$($_.Name)  ($([math]::Round($_.Length/1KB,1)) KB)"
@@ -136,7 +155,7 @@ try {
         Head "Mac 放的文件"
         $fromMac = Join-Path $RepoDir "sync\from-mac"
         if (Test-Path $fromMac) {
-            $files = Get-ChildItem $fromMac -File -ErrorAction SilentlyContinue
+            $files = Get-ChildItem $fromMac -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne ".gitkeep" }
             if ($files) {
                 $files | Sort-Object LastWriteTime -Descending | ForEach-Object {
                     Info "$($_.Name)  ($([math]::Round($_.Length/1KB,1)) KB)"
@@ -147,29 +166,23 @@ try {
         Head "留言板"
         $notes = Join-Path $RepoDir "sync\shared\notes.md"
         if (Test-Path $notes) {
-            $tail = Get-Content $notes -Encoding UTF8 -Tail 20
-            $tail | ForEach-Object { Info $_ }
+            Get-Content $notes -Encoding UTF8 -Tail 20 | ForEach-Object { Info $_ }
         } else { Info "（无 notes.md）" }
     }
 
     # ---------- 恢复 stash ----------
     $stashes = git stash list 2>$null
-    if ($stashes) {
+    if ($stashes -and ($stashes -join "") -match "auto-stash before pull") {
         Head "恢复暂存的改动"
-        $stashMsg = git stash list 2>$null | Select-Object -First 1
-        if ($stashMsg -match "auto-stash before pull") {
-            Info "执行: git stash pop"
-            $popOut = git stash pop 2>&1
-            $popRc = $LASTEXITCODE
-            $popOut | ForEach-Object { Info $_ }
-            if ($popRc -eq 0) { OK "已恢复" } else { Warn "恢复失败，改动仍在 stash 里: git stash list" }
-        }
+        Info "执行: git stash pop"
+        $popOut = git stash pop 2>&1
+        $popRc = $LASTEXITCODE
+        $popOut | ForEach-Object { Info $_ }
+        if ($popRc -eq 0) { OK "已恢复" } else { Warn "恢复失败，改动仍在 stash 里: git stash list" }
     }
 
     Line
     OK "同步拉取完成"
-    Write-Host ""
-    Write-Host "下一步: 若你有东西要传给 Mac，跑 06-sync-push.ps1" -ForegroundColor Gray
     Write-Host ""
 } finally {
     Pop-Location
