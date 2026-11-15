@@ -170,3 +170,71 @@ Goldberg 造不出真 ticket，官方跨平台联机（PlayFab）这条路对 Go
    <Windows 的 IP>
    ```
 3. 主机进世界 → 客机 `Join Game`，先看 LAN 标签页，再试 `Join IP: <主机IP>:2456`
+
+---
+
+# 附：Mac 侧联机为什么走不通（2026-11-15 追加实测）
+
+单人完全可用，但**联机在这台 Mac 上是死路**，与配置无关。三条证据：
+
+## 1. Valheim 要的 SteamNetworkingSockets 版本，这个构建没有
+
+```
+Valheim（com.rlabrecque.steamworks.net.dll）请求的版本：
+  SteamClient020  SteamUser023  SteamFriends017  SteamUtils010
+  SteamNetworkingSockets012   ← 关键
+  SteamNetworkingUtils004     ← 关键
+  SteamMatchMaking009  SteamMatchMakingServers002  SteamNetworking006
+
+Goldberg（aaf2tbz macOS 构建）实际导出：
+  SteamAPI_SteamNetworkingSockets_v008   ✓
+  SteamAPI_SteamNetworkingSockets_v009   ✓
+  SteamAPI_SteamNetworkingUtils_v003     ✓
+  SteamAPI_SteamNetworkingSockets_v012   ✗ 不存在
+  SteamAPI_SteamNetworkingUtils_v004     ✗ 不存在
+
+SteamInternal_CreateInterface 只对 "SteamClient020" 返回非空，其余全 0。
+```
+
+## 2. 就算退到 v009，也是空壳
+
+```
+SNS v009 iface=0x1051557d0
+CreateListenSocketP2P(0) -> 1      ← 返回句柄，看着成功
+CreateListenSocketP2P(1) -> 2
+=== 进程 socket ===
+(无 socket)                        ← 一个 UDP 都没绑
+```
+
+`SteamAPI_Init` + `RunCallbacks` 跑满 8 秒，进程 socket 数为 0。
+
+## 3. 游戏实际运行时同样零端口
+
+进了世界（日志有 `ZNet Start`、`ZNet.LoadWorld: bigage`、genloc 完成），但：
+
+```
+netstat -an | grep -E "2456|47584"  → 全系统为空
+Valheim 的 socket：
+  UDP *:58485                    ← 临时端口（Unity）
+  TCP 198.18.0.1 -> :443         ← PlayFab 重试
+```
+
+对比 Windows：`gbe_fork` 启动即绑 `0.0.0.0:47584`。
+
+## 根因
+
+`gbe_fork` 的网络能力来自**独立库** `libsteamnetworkingsockets`（Windows 发布包里是
+`libsteamnetworkingsockets64.dll`，Linux 包同理）。Windows/Linux 上 Steam 也是这么拆的，
+所以能整包替换。
+
+macOS 上 Steam 的网络实现是**塞在 steamclient.dylib 里**的，Valheim 的 bundle 里只有
+`steam_api.bundle/Contents/MacOS/libsteam_api.dylib`，没有独立的 networking 库。因此
+「替换 networking 库」这条路在 macOS 上架构不成立——除非把网络实现编译进 `libsteam_api`。
+
+上游 `Detanup01/gbe_fork` 只发 Windows 和 Linux 构建，源码里也没有 macOS 分支。
+
+## 因此
+
+- Mac 既不能当主机，也不能当客机
+- 跨平台开关（PlayFab Party）也是死路：伪造 ticket 登不上 PlayFab
+- 想继续，只有三条：给 macOS 移植网络层 / 换两台 Windows / 买第二份游戏
