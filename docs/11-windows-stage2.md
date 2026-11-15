@@ -187,3 +187,9 @@ git push ssh://git@github.com/zengjunzhe/valheim-lan-coop.git main
 - 走 HTTPS 才需要 `-c http.proxy=http://127.0.0.1:7890`，且必须补一次登录。
 
 `work\` 下的东西（发布包、解压产物、备份、脚本）都不入库，靠本文的哈希与步骤复现。
+两个辅助脚本的指纹，方便核对是不是同一份：
+
+```
+8F51809C9FADF0B833060D54326EC5D7EA78C628898DF1D5290F0EF6AE09A3A7  apply-stage2.ps1
+79E6E34F37FDE4E0B1E7661727F02379B9DE950E7E4AF4037367C033D1BD0A34  download-gbe.mjs
+```
