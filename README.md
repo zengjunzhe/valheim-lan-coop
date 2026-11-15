@@ -31,11 +31,11 @@
 | 项 | 状态 |
 |---|---|
 | 目标 | Valheim 局域网双人联机，一份 Steam 授权 |
-| 技术路线 | Goldberg Steam Emulator 替换 steam api |
-| 可行性 | **Mac 单机已实测通过** + **Windows 单机已实测通过**（2026-11-15）；联机未验证 |
+| 技术路线 | Goldberg Steam Emulator 替换 steam api（**Windows 侧 2026-11-15 已回滚，改走官方**） |
+| 可行性 | Mac / Windows 单机 Goldberg 均已实测通过；**Windows 官方联机（PlayFab）也已验证正常** |
 | 现有脚本 | `scripts/mac/setup-valheim-goldberg.sh`、`work\apply-stage2.ps1`（Windows，实测可用）；旧的 01~07 仍是错的 |
 | 现成方案 | GitHub 上找不到任何现成项目 |
-| 下一步 | 阶段 3：两端联机验证 |
+| 下一步 | 阶段 3：两台机联机 —— 官方路线需第二份正版或 Game Pass + `-crossplay` |
 
 ---
 
@@ -124,8 +124,8 @@ valheim + multiplayer + emulator  → 0
 
 ```
 阶段 1：Mac 单机验证          ← 已通过（docs/10）
-阶段 2：Windows 单机验证      ← 已通过（docs/11）
-阶段 3：联机验证              ← 现在做这个
+阶段 2：Windows 单机验证      ← 已通过（docs/11），同日回滚到官方
+阶段 3：联机验证              ← 现在做这个（官方路线：第二份 / Game Pass + -crossplay）
 阶段 4：才写自动化脚本
 ```
 

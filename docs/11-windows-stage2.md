@@ -193,3 +193,33 @@ git push ssh://git@github.com/zengjunzhe/valheim-lan-coop.git main
 8F51809C9FADF0B833060D54326EC5D7EA78C628898DF1D5290F0EF6AE09A3A7  apply-stage2.ps1
 79E6E34F37FDE4E0B1E7661727F02379B9DE950E7E4AF4037367C033D1BD0A34  download-gbe.mjs
 ```
+
+---
+
+## 九、回滚记录（2026-11-15 20:10，Windows 侧改走官方）
+
+Goldberg 验证完之后，这台机决定不再走模拟器，直接登录正常账号玩。回滚做了这些：
+
+| 动作 | 结果 |
+|---|---|
+| 还原 `steam_api64.dll` | SHA256 回到 `A44E5537939AE4EEBC69000589AA9B2437A667813A1657CC779198BAE9B815A9`，298 856 B ✅ |
+| 删除 `steam_settings` | 游戏根目录 + DLL 同级，两处都清 |
+| 删除游戏内 `steam_api64.dll.orig` | 游戏目录恢复成 Steam 原样（工作区仍有备份） |
+| `%APPDATA%\GSE Saves` | 整个目录先备份到 `work\backup\GSE-Saves-20261115-2010\`，再改名为 `GSE Saves.bak-20261115` |
+| 角色 `guo` | 从 GSE 云存档复制到 `LocalLow\IronGate\Valheim\characters_local\guo.fch`，官方模式能选到 |
+| 世界 `BIGDIM` | 救不回来：GSE 里只剩 51 字节云元数据，世界本体没落盘 |
+
+回滚后的启动验证（通过 Steam 启动，不是直接跑 exe）：
+
+```
+11/15/2026 20:11:22: Steam initialized, persona:<真实账号名>
+11/15/2026 20:11:24: Logged in PlayFab user via Steam auth session ticket   ← 官方联机登录成功
+11/15/2026 20:11:24: PlayFab local entity ID is 5591EB0FD79FAA75
+```
+
+**结论：这台机上官方联机（PlayFab）本来就正常，Goldberg 是不必要的降级。**
+阶段 3 若要两台机联机，官方路线需要第二份正版（¥30）或 Windows 侧 PC Game Pass + `-crossplay`；
+Mac 侧单份授权的 Goldberg 环境保持原样没动。
+
+回滚还差一步要人做：把 Defender 里给 `work\` 和 `...\Plugins\x86_64` 加的两个排除项删掉
+（非管理员，脚本删不了）。
