@@ -1,164 +1,183 @@
-# Windows 阶段 2：环境已摸清，卡在 Defender 这一道门（2026-11-15）
+# Windows 阶段 2：已通过（2026-11-15 实测）
 
-> 本文是 Windows 侧的实测记录，对应 `09-next-steps.md` 的阶段 2。
-> **结论先行：技术路线没问题，游戏已装好，卡点是杀软——Goldberg 的 Windows 发布包一落盘就被
-> Defender 判成 `Trojan:Win32/Suschil!rfn`，之后文件连读都读不了；本机是中完整性、非管理员、
-> Tamper Protection 已开，命令行加排除项直接被拒。**
+> 环境：`LAPTOP-DOA9KT57` / Windows 11 25H2 build 26200.9457 / Valheim buildid **26249040**
+> （与 Mac 侧一致）/ Steam 库 `D:\steam`。
+>
+> 对应 `09-next-steps.md` 的阶段 2。**结论：gbe_fork 的 Windows 构建能加载，游戏能起、
+> 身份能生效、`47584` 在监听；PlayFab 登录必然失败，属预期。**
 
 ---
 
-## 一、本机事实（全部实测）
+## 一、结论
+
+| 项 | 结果 |
+|---|---|
+| `gbe_fork release-2026_09_27` 的 Windows DLL 能否加载 | ✅ 能 |
+| 游戏能启动到主菜单 | ✅（窗口标题 `Valheim`，进程常驻 2.1 GB，D3D11 已初始化） |
+| 中文界面 | ✅（`language=schinese`） |
+| 身份生效 | ✅ 日志 `Steam initialized, persona:PlayerB` |
+| LAN 发现端口在监听 | ✅ `0.0.0.0:47584` UDP |
+| PlayFab 登录 | ❌ `errorcode:101 Invalid ticket`（伪造 ticket 无效，预期） |
+
+日志证据（`%USERPROFILE%\AppData\LocalLow\IronGate\Valheim\Player.log`）：
+
+```
+11/15/2026 19:05:57: Using steam_appid.txt
+11/15/2026 19:05:57: Using steam APPID:892970
+11/15/2026 19:05:57: Authentication:k_ESteamNetworkingAvailability_Current
+11/15/2026 19:07:00: Steam initialized, persona:PlayerB
+11/15/2026 19:07:02: /Client/LoginWithSteam: ... errorcode:101, errordesc:Invalid ticket
+```
+
+端口证据（`Get-NetUDPEndpoint -OwningProcess <valheim pid>`）：
+
+```
+LocalAddress  LocalPort
+0.0.0.0       47584      ← Goldberg 的 LAN 发现端口，和 Mac 侧要求一致
+```
+
+---
+
+## 二、与旧文档不一致的地方（以本节为准）
+
+| 项 | 旧文档 | 实测 |
+|---|---|---|
+| `steam_settings` 位置 | 游戏根目录 | **根目录无效**：emu 仍随机生成 persona（`gse orca`）；必须放 **DLL 同级** `valheim_Data\Plugins\x86_64\steam_settings`。两处都写更保险 |
+| 用哪个构建 | 未说明 | 用 `release\experimental\x64\steam_api64.dll`（22 777 768 B）。包里另有两种：`regular\x64`（11 431 336 B）与 `steamclient_experimental` |
+| experimental 的副作用 | 未记录 | 默认**阻断所有非内网连接**（只放行 10/8、127/8、169.254/16、172.16/12、192.168/16、224+）；要解除在 `configs.main.ini` 写 `disable_lan_only=1` |
+| 发布包能不能直接下 | 能 | Defender 把发布包判成 `Trojan:Win32/Suschil!rfn`（事件 1116），之后**读都读不了**，还会连文件一起删掉 → 必须先把目录加进排除项 |
+| 下载工具 | curl / Invoke-WebRequest | 本机 schannel 报 `SEC_E_NO_CREDENTIALS`，curl/PowerShell 都不通，改用 node（自带 CA） |
+| `steam_settings` 的配置格式 | `.ini` | 对，Windows 构建读 ini。`custom_broadcasts.txt` 仍是 txt |
+| 端口 2456 | 游戏端口 | 对；发现端口是 **47584**，两者都要放行 |
+
+---
+
+## 三、实测步骤（可复跑）
+
+```powershell
+# 1. 前置：Windows 安全中心 → 排除项，加
+#    C:\Users\lenovo\Desktop\ylsd\work
+#    D:\steam\steamapps\common\Valheim\valheim_Data\Plugins\x86_64
+#    （本机非管理员 + Tamper Protection，命令行加不了，只能走 UI）
+
+# 2. 一条命令做完剩下的
+pwsh -File C:\Users\lenovo\Desktop\ylsd\work\apply-stage2.ps1
+```
+
+脚本做的事：发布包不在就重下（node）→ `7zr` 解压 → 备份原版 `.orig`（只做一次）→
+复制 `experimental\x64\steam_api64.dll` → 把 `steam_settings` 写进 DLL 同级和游戏根目录 →
+打印启动/回滚命令。加 `-WhatIf` 可空跑。
+
+手工等价步骤：
+
+```powershell
+$G = 'D:\steam\steamapps\common\Valheim'
+$P = "$G\valheim_Data\Plugins\x86_64"
+
+# 备份
+if (-not (Test-Path "$P\steam_api64.dll.orig")) { Copy-Item "$P\steam_api64.dll" "$P\steam_api64.dll.orig" }
+
+# 替换
+Copy-Item 'C:\Users\lenovo\Desktop\ylsd\work\gbe\x\release\experimental\x64\steam_api64.dll' "$P\steam_api64.dll" -Force
+
+# 配置（DLL 同级 + 根目录都写）
+foreach ($ss in @("$P\steam_settings", "$G\steam_settings")) {
+    New-Item -ItemType Directory -Force -Path $ss | Out-Null
+    Copy-Item 'C:\Users\lenovo\Desktop\ylsd\work\steam_settings\*' $ss -Force
+}
+
+# 启动
+& "$G\valheim.exe" -console
+```
+
+`steam_settings` 内容（客机 PlayerB）：
+
+```ini
+# steam_appid.txt
+892970
+
+# configs.user.ini
+[user::general]
+account_name=PlayerB
+account_steamid=76561198000000002
+language=schinese
+
+# configs.main.ini
+[main::connectivity]
+disable_networking=0
+listen_port=47584
+
+# custom_broadcasts.txt
+192.168.5.255
+192.168.5.11
+192.168.5.12
+```
+
+---
+
+## 四、本机事实
 
 | 项 | 值 |
 |---|---|
 | 主机名 | `LAPTOP-DOA9KT57` |
-| 系统 | build **26200.9457**（注册表 `ProductName` 写的是 Windows 10 Pro，实际是 Win11 25H2 的 build 号） |
-| 当前用户 | `LAPTOP-DOA9KT57\lenovo`，**中完整性 / UAC 未提升**，`BUILTIN\Administrators` 是 deny-only |
-| Steam | `D:\steam`（库：`D:` / `E:` / `F:`） |
-| Valheim | `D:\steam\steamapps\common\Valheim` |
-| buildid | **26249040**（与 Mac 侧完全一致，见 `10-mac-verified.md`） |
-| 体积 | 995 个文件 / 4.23 GB，`StateFlags=4`（已完整安装） |
-| 原版 DLL | `valheim_Data\Plugins\x86_64\steam_api64.dll`，298 856 字节 |
-| 原版 SHA256 | `A44E5537939AE4EEBC69000589AA9B2437A667813A1657CC779198BAE9B815A9` |
-| 备份 | `work\backup\steam_api64.dll.orig`（同哈希，已验证可读） |
-| 网络 | WLAN `192.168.5.12/24`，网关 `192.168.5.1` |
-| 与 Mac 的关系 | Mac `192.168.5.11/24` → **同网段**，广播地址 `192.168.5.255`，可以直接做 LAN 发现 |
-| Steam 进程 | 当前未运行 |
-
-角色按 `config/role.conf`：**Mac 是主机（PlayerA / 192.168.5.11），Windows 是客机（PlayerB / 192.168.5.12）**。
+| 系统 | build 26200.9457（注册表 `ProductName` 仍写 Windows 10 Pro，实际是 Win11 25H2 的 build 号） |
+| 当前用户 | `LAPTOP-DOA9KT57\lenovo`，**中完整性**，`BUILTIN\Administrators` deny-only |
+| Steam | `D:\steam` |
+| Valheim | `D:\steam\steamapps\common\Valheim`，995 文件 / 4.23 GB，`StateFlags=4` |
+| 原版 DLL | 298 856 B，SHA256 `A44E5537939AE4EEBC69000589AA9B2437A667813A1657CC779198BAE9B815A9` |
+| 备份 | `work\backup\steam_api64.dll.orig`，以及游戏内 `steam_api64.dll.orig`（同哈希） |
+| 换上的 DLL | `release\experimental\x64` 那份，SHA256 `36AACB0EBFAA2E2E585A16D26A43E56B71C31AFDC7D0E06477B6E75665FDB163` |
+| 网络 | WLAN `192.168.5.12/24`，网关 `192.168.5.1`，与 Mac `192.168.5.11` 同网段 |
+| 网络类别 | **Public**（`ZTE-FCSxec`） |
+| 防火墙 | 入站默认 Block，但已有两条 `valheim.exe` 程序级入站允许规则（Domain/Private/Public 全覆盖）→ 2456 与 47584 入站放行 |
+| 存档位置 | `%APPDATA%\GSE Saves\`（Goldberg 全局设置落在 `GSE Saves\settings\configs.user.ini`） |
 
 ---
 
-## 二、卡点证据
+## 五、需要人确认的三项
+
+脚本只能证明「进程起来、Steam 初始化成功、端口在听」，下面三项要人点：
 
 ```
-发布包 emu-win-release-vs22.7z   13 455 496 字节   下载成功
-发布包 emu-win-release-vs26.7z   13 374 853 字节   下载成功
+□ 新建世界能进
+□ 能走动、砍树
+□ 退出游戏不崩
 ```
-
-落盘后立刻被拦：
-
-- 事件日志 `Microsoft-Windows-Windows Defender/Operational`，事件 ID **1116**
-  ```
-  名称: Trojan:Win32/Suschil!rfn
-  ID: 2147927547
-  严重性: 严重
-  路径: file:_C:\Users\lenovo\Desktop\ylsd\work\gbe\emu-win-release-vs22.7z
-  ```
-- 之后任何读取都失败，`Get-FileHash` / `Copy-Item` / `Get-Content -AsByteStream` 一律报
-  「无法成功完成操作，因为文件包含病毒或潜在的垃圾软件。」
-  → 文件还在（13.4 MB），但**内核层不让读**，解压无从谈起。
-
-Defender 状态（`Get-MpComputerStatus`）：
-
-```
-AMRunningMode             : Normal
-RealTimeProtectionEnabled : True
-AntivirusEnabled          : True
-IsTamperProtected         : True
-```
-
-尝试命令行加排除：
-
-```
-Add-MpPreference -ExclusionPath "C:\Users\lenovo\Desktop\ylsd\work"
-→ 你的权限不足，无法执行请求的操作。
-```
-
-两条结论：
-1. **没提权**，调不动 Defender；
-2. 就算提权，**Tamper Protection 开着，命令行写的排除项也会被拦**，只能走 Windows 安全中心界面。
-
-后续复查：两个发布包已被 Defender **连文件一起清掉**（`work\gbe\` 现在是空的）。
-所以加完排除项之后要重新下载一次，不能指望旧文件还在。
-
-> 附带说明：这是把 Steam 模拟器判成 HackTool 的常规误报（微软对这类工具的检测就是故意的），
-> 不是发布包被投毒。但**必须由机器主人自己加白**，不能靠改扩展名、编码绕过去——绕过去 Valheim 加载时一样会被拦。
 
 ---
 
-## 三、解锁这一步：只有管理员能做（1 分钟）
-
-**Windows 安全中心 → 病毒和威胁防护 → 病毒和威胁防护设置 → 管理设置 → 排除项 → 添加或删除排除项 → 添加文件夹**，把这两个目录加进去：
-
-```
-C:\Users\lenovo\Desktop\ylsd\work
-D:\steam\steamapps\common\Valheim\valheim_Data\Plugins\x86_64
-```
-
-- 第一个是解压/暂存区，第二个是 DLL 最终落点。
-- 游戏验证通过后可以把这两条排除删掉（但每次改 DLL 都要重新加）。
-- 只排除这两个目录，不要整个 D 盘。
-
-加完排除后，剩下的全自动：
-
-```powershell
-pwsh -File C:\Users\lenovo\Desktop\ylsd\work\apply-stage2.ps1
-```
-
-脚本会：校验发布包可读 → 停 Steam → `7zr` 解压 → 备份原版（只做一次）→ 替换 DLL →
-写 `steam_settings` → 打印启动命令和回滚命令。加 `-WhatIf` 可以先空跑看它要动哪些文件。
-
----
-
-## 四、已备好的东西（都在 `work\`，不入库）
-
-| 路径 | 内容 |
-|---|---|
-| `work\backup\steam_api64.dll.orig` | 原版 DLL 备份，SHA256 见上，**回滚唯一依据** |
-| `work\steam_settings\steam_appid.txt` | `892970` |
-| `work\steam_settings\configs.user.ini` | `account_name=PlayerB` / `account_steamid=76561198000000002` / `schinese` |
-| `work\steam_settings\configs.main.ini` | `disable_networking=0` / `listen_port=47584` |
-| `work\steam_settings\custom_broadcasts.txt` | `192.168.5.255` / `192.168.5.11` / `192.168.5.12` |
-| `work\tools\7zr.exe` | 7-Zip 26.04 独立解包器，602 624 字节（系统自带的 `tar.exe` 打不开这个 7z） |
-| `work\download-gbe.mjs` | 用 node 下发布包（本机 schannel 报 `SEC_E_NO_CREDENTIALS`，curl/PowerShell 都不通） |
-| `work\apply-stage2.ps1` | 上面那套流程的脚本，发布包不在会自动重下 |
-
-`steam_settings` 已按 `10-mac-verified.md` 的事实写：Windows 构建读 `.ini`，发现端口 **47584**，
-LAN 发现靠 `custom_broadcasts.txt`（**不是** `enable_lan_only`，那个键不存在）。
-
----
-
-## 五、回滚
+## 六、回滚
 
 ```powershell
 $G = 'D:\steam\steamapps\common\Valheim'
-Copy-Item "$G\valheim_Data\Plugins\x86_64\steam_api64.dll.orig" `
-          "$G\valheim_Data\Plugins\x86_64\steam_api64.dll" -Force
-Remove-Item "$G\steam_settings" -Recurse -Force
-```
+$P = "$G\valheim_Data\Plugins\x86_64"
+Copy-Item "$P\steam_api64.dll.orig" "$P\steam_api64.dll" -Force
+Remove-Item "$P\steam_settings", "$G\steam_settings" -Recurse -Force
 
-回滚后校验：
-
-```powershell
-(Get-FileHash "$G\valheim_Data\Plugins\x86_64\steam_api64.dll" -Algorithm SHA256).Hash
+# 校验
+(Get-FileHash "$P\steam_api64.dll" -Algorithm SHA256).Hash
 # 应等于 A44E5537939AE4EEBC69000589AA9B2437A667813A1657CC779198BAE9B815A9
 ```
 
 ---
 
-## 六、如果不想碰杀软
+## 七、阶段 3 的入口（下一步）
 
-| 方案 | 成本 | 说明 |
-|---|---|---|
-| 买第二份（史低 ¥30） | ¥30 | 两端都用真 Steam，两个账号同时在线，零技术风险 |
-| Windows 侧 PC Game Pass | 订阅费 | 官方 crossplay：Steam ↔ Game Pass，两端加 `-crossplay` |
-| 继续 Goldberg | 0 | 需要一次性加排除项；两端都得是 Goldberg，真 Steam 客户端看不懂它的 LAN 广播 |
-
-注意 `config/role.conf` 与 `templates/configs.user.A.ini` 的角色标注是反的（配置文件说 Mac 是主机、
-A 份写的是 Windows 主机），等阶段 3 联机通了再一起修，现在不要两边同时改。
+1. **Mac 侧**把 `custom_broadcasts.txt` 补成三行 `192.168.5.255` / `192.168.5.11` / `192.168.5.12`
+   （`10-mac-verified.md` 里写的是 `192.168.5.x` 但内容是举例，要按实际 IP 改）。
+2. 两端 `listen_port` 都是 `47584`，`disable_networking=0`。
+3. Mac 开世界（主机）→ Windows `Join Game` 先看 **LAN 标签页**，没有再 `Join IP: 192.168.5.11:2456`。
+4. 判据：能进同一个世界、两人互相看见、动作同步。
 
 ---
 
-## 七、仓库同步（本机网络）
+## 八、仓库同步（本机网络）
 
 这台机器直连 GitHub 会 `Connection was reset` / 443 超时。系统代理开着 `127.0.0.1:7890`，
-git 要走代理才通：
+git 要走代理：
 
 ```powershell
-git -c http.proxy=http://127.0.0.1:7890 fetch/push
+git -c http.proxy=http://127.0.0.1:7890 fetch   # push 还需要一次 GitHub 登录
 ```
 
-另外本机没有缓存 GitHub 凭据（`credential.helper=manager-core` 但 `credential fill` 直接拒绝），
-**push 需要一次交互式登录**，所以本次提交是先在本地落盘、等凭据补上再推。
-
+`work\` 下的东西（发布包、解压产物、备份、脚本）都不入库，靠本文的哈希与步骤复现。

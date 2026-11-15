@@ -1,5 +1,15 @@
 # Valheim 局域网双人联机（一份 Steam 授权）
 
+> **2026-11-15 更新（Windows 阶段 2 也已通过）：** 同一台 Windows（`LAPTOP-DOA9KT57`，Valheim buildid
+> `26249040`，与 Mac 一致）上 `gbe_fork release-2026_09_27` 的 `experimental` 构建能加载，
+> `Steam initialized, persona:PlayerB`，`0.0.0.0:47584` 在监听。踩到的坑：Defender 把发布包判成
+> `Trojan:Win32/Suschil!rfn`（要先加排除项）、`steam_settings` **必须放 DLL 同级**（游戏根目录无效）。
+> 详见 **[`docs/11-windows-stage2.md`](docs/11-windows-stage2.md)**，脚本：`work\apply-stage2.ps1`。
+>
+> 剩下就是阶段 3：两端联机。
+>
+> ---
+>
 > **2026-11-15 更新（Mac 实测通过）：** 阶段 1 已在 Apple M1 Pro / macOS 27 上跑通——
 > Goldberg 的 macOS dylib 能注入，游戏能进主菜单、能进单人世界、界面可中文。
 > 实测记录与可执行步骤见 **[`docs/10-mac-verified.md`](docs/10-mac-verified.md)**，
@@ -22,10 +32,10 @@
 |---|---|
 | 目标 | Valheim 局域网双人联机，一份 Steam 授权 |
 | 技术路线 | Goldberg Steam Emulator 替换 steam api |
-| 可行性 | **Mac 单机已实测通过**（2026-11-15）；联机未验证 |
-| 现有脚本 | `scripts/mac/setup-valheim-goldberg.sh` 可用；旧的 01~07 仍是错的 |
+| 可行性 | **Mac 单机已实测通过** + **Windows 单机已实测通过**（2026-11-15）；联机未验证 |
+| 现有脚本 | `scripts/mac/setup-valheim-goldberg.sh`、`work\apply-stage2.ps1`（Windows，实测可用）；旧的 01~07 仍是错的 |
 | 现成方案 | GitHub 上找不到任何现成项目 |
-| 下一步 | Windows 单机验证 → 两端联机验证（阶段 2、3） |
+| 下一步 | 阶段 3：两端联机验证 |
 
 ---
 
@@ -113,9 +123,9 @@ valheim + multiplayer + emulator  → 0
 **详细步骤见 [`docs/09-next-steps.md`](docs/09-next-steps.md)**（含具体命令和判据）。
 
 ```
-阶段 1：Mac 单机验证          ← 现在应该做这个
-阶段 2：Windows 单机验证
-阶段 3：联机验证
+阶段 1：Mac 单机验证          ← 已通过（docs/10）
+阶段 2：Windows 单机验证      ← 已通过（docs/11）
+阶段 3：联机验证              ← 现在做这个
 阶段 4：才写自动化脚本
 ```
 
@@ -127,7 +137,8 @@ valheim + multiplayer + emulator  → 0
 
 | 路径 | 内容 | 状态 |
 |---|---|---|
-| `docs/10-mac-verified.md` | **Mac 实测记录（最新，先看这个）** | ✅ 已实测通过 |
+| `docs/11-windows-stage2.md` | **Windows 实测记录（先看这个）** | ✅ 已实测通过 |
+| `docs/10-mac-verified.md` | Mac 实测记录 | ✅ 已实测通过 |
 | `scripts/mac/setup-valheim-goldberg.sh` | Mac 一键安装（实测可用） | ✅ 可用 |
 | `docs/08-verification.md` | 事实核查（macOS 部分见 10 号） | ⚠️ 部分已被取代 |
 | `docs/09-next-steps.md` | 验证步骤（含命令和判据） | ✅ 可执行 |
