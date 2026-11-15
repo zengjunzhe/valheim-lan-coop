@@ -173,11 +173,17 @@ Remove-Item "$P\steam_settings", "$G\steam_settings" -Recurse -Force
 
 ## 八、仓库同步（本机网络）
 
-这台机器直连 GitHub 会 `Connection was reset` / 443 超时。系统代理开着 `127.0.0.1:7890`，
-git 要走代理：
+这台机器直连 GitHub HTTPS 会 `Connection was reset` / 443 超时，而且没有缓存 HTTPS 凭据
+（`credential.helper=manager-core`，`credential fill` 直接拒绝，push 会弹 `Connect to GitHub` 登录窗）。
+
+**能用的方式：SSH 推送**（`~/.ssh/id_ed25519` 已在 GitHub 上，`ssh -T git@github.com` 回
+`Hi zengjunzhe!`）：
 
 ```powershell
-git -c http.proxy=http://127.0.0.1:7890 fetch   # push 还需要一次 GitHub 登录
+git push ssh://git@github.com/zengjunzhe/valheim-lan-coop.git main
 ```
+
+- SSH 22 端口直连通，不需要代理；`ssh.github.com:443` 也通（备用）。
+- 走 HTTPS 才需要 `-c http.proxy=http://127.0.0.1:7890`，且必须补一次登录。
 
 `work\` 下的东西（发布包、解压产物、备份、脚本）都不入库，靠本文的哈希与步骤复现。
