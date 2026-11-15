@@ -1,10 +1,18 @@
-# ⚠️ 本仓库当前状态：未经证实的方案
+# Valheim 局域网双人联机（一份 Steam 授权）
 
-> **2026-11-15 更新：核心技术论断已被推翻。**
+> **2026-11-15 更新（Mac 实测通过）：** 阶段 1 已在 Apple M1 Pro / macOS 27 上跑通——
+> Goldberg 的 macOS dylib 能注入，游戏能进主菜单、能进单人世界、界面可中文。
+> 实测记录与可执行步骤见 **[`docs/10-mac-verified.md`](docs/10-mac-verified.md)**，
+> 一键脚本：`scripts/mac/setup-valheim-goldberg.sh`。
+>
+> 下面这段是核查阶段的历史结论，其中关于 macOS 的细节已被 10 号文档取代（尤其
+> `steam_settings` 位置、`user_steam_id.txt` 无效、存档目录路径三点）。
+>
+> **2026-11-15 早先：核心技术论断曾被推翻。**
 >
 > 详细核查见 **[`docs/08-verification.md`](docs/08-verification.md)**。
 >
-> **`scripts/` 目录下的脚本基于错误的配置键，按现状执行必然失败。**
+> **`scripts/` 下旧的 `01~07` 脚本基于错误的配置键，按现状执行必然失败**（新的 `setup-valheim-goldberg.sh` 已实测可用）。
 
 ---
 
@@ -14,10 +22,10 @@
 |---|---|
 | 目标 | Valheim 局域网双人联机，一份 Steam 授权 |
 | 技术路线 | Goldberg Steam Emulator 替换 steam api |
-| 可行性 | **技术上有希望，但未实测** |
-| 现有脚本 | **配置键全错，不能直接用** |
-| 现成方案 | **GitHub 上找不到任何现成项目** |
-| 下一步 | 先在 Mac 上做单机验证，通过后再谈联机 |
+| 可行性 | **Mac 单机已实测通过**（2026-11-15）；联机未验证 |
+| 现有脚本 | `scripts/mac/setup-valheim-goldberg.sh` 可用；旧的 01~07 仍是错的 |
+| 现成方案 | GitHub 上找不到任何现成项目 |
+| 下一步 | Windows 单机验证 → 两端联机验证（阶段 2、3） |
 
 ---
 
@@ -119,7 +127,9 @@ valheim + multiplayer + emulator  → 0
 
 | 路径 | 内容 | 状态 |
 |---|---|---|
-| `docs/08-verification.md` | **事实核查，先看这个** | ✅ 已核查 |
+| `docs/10-mac-verified.md` | **Mac 实测记录（最新，先看这个）** | ✅ 已实测通过 |
+| `scripts/mac/setup-valheim-goldberg.sh` | Mac 一键安装（实测可用） | ✅ 可用 |
+| `docs/08-verification.md` | 事实核查（macOS 部分见 10 号） | ⚠️ 部分已被取代 |
 | `docs/09-next-steps.md` | 验证步骤（含命令和判据） | ✅ 可执行 |
 | `docs/00-checklist.md` | 操作清单 | ⚠️ 基于错误配置，待重写 |
 | `docs/01-architecture.md` | 架构原理 | ⚠️ 部分错误 |
