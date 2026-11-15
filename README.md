@@ -50,25 +50,40 @@ valheim-lan-coop/
 │   ├── 03-mac-setup.md            ← Mac 客机完整步骤
 │   ├── 04-play-and-join.md        ← 开玩、加入、存档
 │   ├── 05-troubleshooting.md      ← 排错表
-│   └── 06-rollback.md             ← 回滚到正版
+│   ├── 06-rollback.md             ← 回滚到正版
+│   └── 07-git-as-bridge.md        ← 用 GitHub 当两台机之间的中转
 ├── scripts/
 │   ├── windows/
 │   │   ├── 01-detect.ps1          ← 环境探测（先跑）
 │   │   ├── 02-apply-goldberg.ps1  ← 打补丁
 │   │   ├── 03-firewall.ps1        ← 防火墙放行
 │   │   ├── 04-launch.ps1          ← 启动游戏
+│   │   ├── 05-sync-pull.ps1       ← 从 GitHub 拉对方的东西
+│   │   ├── 06-sync-push.ps1       ← 推自己的存档/状态/诊断
+│   │   ├── 07-sync-both.ps1       ← 一键双向同步
 │   │   └── 99-rollback.ps1        ← 一键回滚
 │   └── mac/
 │       ├── 01-detect.sh
 │       ├── 02-apply-goldberg.sh
 │       ├── 03-resign.sh
 │       ├── 04-launch.sh
+│       ├── 05-sync-pull.sh
+│       ├── 06-sync-push.sh
+│       ├── 07-sync-both.sh
 │       └── 99-rollback.sh
-└── templates/                     ← 参考副本，脚本不读
-    ├── configs.user.A.ini         ← Windows 主机身份
-    ├── configs.user.B.ini         ← Mac 客机身份
-    ├── configs.main.lan.ini       ← enable_lan_only=1
-    └── steam_appid.txt
+├── templates/                     ← 参考副本，脚本不读
+│   ├── configs.user.A.ini         ← Windows 主机身份
+│   ├── configs.user.B.ini         ← Mac 客机身份
+│   ├── configs.main.lan.ini       ← enable_lan_only=1
+│   └── steam_appid.txt
+└── sync/                          ← GitHub 中转目录（见下）
+    ├── shared/                    ← 状态交换 + 留言板
+    ├── saves/windows/             ← 主机存档
+    ├── saves/mac/                 ← 客机存档
+    ├── diag/windows/              ← Windows 诊断
+    ├── diag/mac/                  ← Mac 诊断
+    ├── from-windows/              ← Windows → Mac 传文件
+    └── from-mac/                  ← Mac → Windows 传文件
 ```
 
 ---
@@ -171,6 +186,34 @@ powershell -ExecutionPolicy Bypass -File .\99-rollback.ps1
 ```
 
 恢复原版文件后可正常通过 Steam 启动，存档不受影响。
+
+---
+
+## GitHub 当两台机之间的中转
+
+这个仓库不只是代码托管，同时是 **Windows ↔ Mac 的数据管道**。不用 U 盘、不用微信、不用内网共享。
+
+```powershell
+# Windows
+.\scripts\windows\07-sync-both.ps1                          # 双向同步
+.\scripts\windows\06-sync-push.ps1 -IncludeSaves -Diag      # 带存档和诊断
+```
+
+```bash
+# Mac
+./scripts/mac/07-sync-both.sh                                 # 双向同步
+./scripts/mac/06-sync-push.sh --saves --diag                  # 带存档和诊断
+```
+
+| 想交换什么 | 放哪 |
+|---|---|
+| IP / buildid / 补丁状态 | `sync/shared/status-*.md`（脚本自动写） |
+| 世界存档、角色存档 | `sync/saves/` |
+| 诊断信息（排错） | `sync/diag/` |
+| 临时文件、截图、日志 | `sync/from-windows/` 或 `sync/from-mac/` |
+| 留言 | `sync/shared/notes.md` |
+
+目录按机器划分，**只写自己那半边**，所以不会产生 Git 冲突。详见 [`docs/07-git-as-bridge.md`](docs/07-git-as-bridge.md)。
 
 ---
 

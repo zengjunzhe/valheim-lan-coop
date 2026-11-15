@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## v1.2.0 — GitHub 作为两台机之间的中转
+
+**新增**：仓库兼作 Windows ↔ Mac 的数据管道，不再只托管代码。
+
+新增 `sync/` 目录 + 6 个同步脚本：
+
+| 脚本 | 作用 |
+|---|---|
+| `05-sync-pull` | 拉取对方放的存档/状态/诊断 |
+| `06-sync-push` | 推送自己的存档/状态/诊断 |
+| `07-sync-both` | 一键先拉再推 |
+
+关键设计：
+
+- **目录按机器划分**：Windows 只写 `saves/windows/`、`status-windows.md`、`from-windows/`；Mac 只写自己那几个 → 不会产生 Git 冲突
+- **状态自动生成**：脚本读 IP、buildid、补丁状态、签名状态、端口监听，写成 markdown，对方 pull 一下就看到，不用微信问"你 IP 多少"
+- **存档体积保护**：单文件超过 50MB 自动跳过并提示；拷贝时先清空旧内容，只保留最新一份
+- **诊断一键打包**：`-Diag` / `--diag` 生成含系统信息、配置内容、dll 哈希、崩溃日志的文本
+- **pull 前自动 stash**：本地有未提交改动时自动 `git stash`，pull 完再 pop
+
+同时修正 `.gitignore`：
+
+- 之前的 `diag-*.txt` 无前导斜杠，会误伤 `sync/diag/` 下要入库的诊断文件 → 改为 `/diag-*.txt`
+- `steam_settings/` 保持忽略（那是游戏目录里的，不该入库）
+
+
 ## v1.1.0 — 改为 Steam 下载流程
 
 **变更**：不再用 steamcmd 匿名安装客户端，改为两台都用 Steam 客户端下载。

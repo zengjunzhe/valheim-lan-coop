@@ -98,6 +98,20 @@ Test-Path "$v\valheim_Data\Plugins\x86_64\steam_api64.dll.orig"  # True
 
 ---
 
+## 同步清单（GitHub 中转）
+
+```
+□ Windows: 进世界后跑 .\06-sync-push.ps1 -Message "世界已开，IP 见 status"
+□ Mac:     ./05-sync-pull.sh          ← 看到 Windows 的 IP 和 buildid
+□ Mac:     连不上时 ./06-sync-push.sh --diag
+□ Windows: .\05-sync-pull.ps1         ← 拉 Mac 的诊断来看
+□ 想备份存档: .\06-sync-push.ps1 -IncludeSaves  /  ./06-sync-push.sh --saves
+```
+
+详细见 [`07-git-as-bridge.md`](07-git-as-bridge.md)。
+
+---
+
 ## 出问题先看这三个
 
 1. **`enable_lan_only=1` 两端都设了吗？** 缺一个就连不上
