@@ -69,6 +69,9 @@ Add-MpPreference -ExclusionPath "C:\Users\lenovo\Desktop\ylsd\work"
 1. **没提权**，调不动 Defender；
 2. 就算提权，**Tamper Protection 开着，命令行写的排除项也会被拦**，只能走 Windows 安全中心界面。
 
+后续复查：两个发布包已被 Defender **连文件一起清掉**（`work\gbe\` 现在是空的）。
+所以加完排除项之后要重新下载一次，不能指望旧文件还在。
+
 > 附带说明：这是把 Steam 模拟器判成 HackTool 的常规误报（微软对这类工具的检测就是故意的），
 > 不是发布包被投毒。但**必须由机器主人自己加白**，不能靠改扩展名、编码绕过去——绕过去 Valheim 加载时一样会被拦。
 
@@ -108,7 +111,8 @@ pwsh -File C:\Users\lenovo\Desktop\ylsd\work\apply-stage2.ps1
 | `work\steam_settings\configs.main.ini` | `disable_networking=0` / `listen_port=47584` |
 | `work\steam_settings\custom_broadcasts.txt` | `192.168.5.255` / `192.168.5.11` / `192.168.5.12` |
 | `work\tools\7zr.exe` | 7-Zip 26.04 独立解包器，602 624 字节（系统自带的 `tar.exe` 打不开这个 7z） |
-| `work\apply-stage2.ps1` | 上面那套流程的脚本 |
+| `work\download-gbe.mjs` | 用 node 下发布包（本机 schannel 报 `SEC_E_NO_CREDENTIALS`，curl/PowerShell 都不通） |
+| `work\apply-stage2.ps1` | 上面那套流程的脚本，发布包不在会自动重下 |
 
 `steam_settings` 已按 `10-mac-verified.md` 的事实写：Windows 构建读 `.ini`，发现端口 **47584**，
 LAN 发现靠 `custom_broadcasts.txt`（**不是** `enable_lan_only`，那个键不存在）。
@@ -143,3 +147,18 @@ Remove-Item "$G\steam_settings" -Recurse -Force
 
 注意 `config/role.conf` 与 `templates/configs.user.A.ini` 的角色标注是反的（配置文件说 Mac 是主机、
 A 份写的是 Windows 主机），等阶段 3 联机通了再一起修，现在不要两边同时改。
+
+---
+
+## 七、仓库同步（本机网络）
+
+这台机器直连 GitHub 会 `Connection was reset` / 443 超时。系统代理开着 `127.0.0.1:7890`，
+git 要走代理才通：
+
+```powershell
+git -c http.proxy=http://127.0.0.1:7890 fetch/push
+```
+
+另外本机没有缓存 GitHub 凭据（`credential.helper=manager-core` 但 `credential fill` 直接拒绝），
+**push 需要一次交互式登录**，所以本次提交是先在本地落盘、等凭据补上再推。
+
